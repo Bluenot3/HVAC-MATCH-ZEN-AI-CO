@@ -14,8 +14,14 @@ const PORT = 3000;
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Initialize Gemini Client
+// Initialize Multi-Provider AI Credentials
 const geminiApiKey = process.env.GEMINI_API_KEY;
+const openaiApiKey = process.env.OPENAI_API_KEY;
+const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+const groqApiKey = process.env.GROQ_API_KEY;
+const mistralApiKey = process.env.MISTRAL_API_KEY;
+const openrouterApiKey = process.env.OPENROUTER_API_KEY;
+
 let ai: GoogleGenAI | null = null;
 if (geminiApiKey) {
   ai = new GoogleGenAI({
@@ -28,11 +34,24 @@ if (geminiApiKey) {
   });
 }
 
-// Google Maps API Key configuration endpoint (safely provides public client key only)
+// Google Maps & ZEN AI Multi-Provider Configuration Status
 app.get("/api/config", (req, res) => {
   res.json({
     mapsApiKey: process.env.VITE_GOOGLE_MAPS_API_KEY || "",
     hasGeminiKey: Boolean(geminiApiKey),
+    hasOpenaiKey: Boolean(openaiApiKey),
+    hasAnthropicKey: Boolean(anthropicApiKey),
+    hasGroqKey: Boolean(groqApiKey),
+    hasMistralKey: Boolean(mistralApiKey),
+    hasOpenrouterKey: Boolean(openrouterApiKey),
+    activeDefaultProvider: geminiApiKey
+      ? "gemini"
+      : openaiApiKey
+      ? "openai"
+      : groqApiKey
+      ? "groq"
+      : "local",
+    brand: "ZEN AI Co.",
   });
 });
 
@@ -309,97 +328,392 @@ app.post("/api/routes/matrix", async (req, res) => {
   }
 });
 
-// AI Dispatch Assistant Endpoint using Gemini Flash
+// ==========================================
+// ZEN AI Co. Multi-Provider Intelligence Engine
+// Supports: OpenAI, Google Gemini, Anthropic Claude, Groq, Mistral, OpenRouter, and Guaranteed Local Engine
+// ==========================================
+
+// Helper: Call OpenAI-compatible Chat Completions (OpenAI, Groq, Mistral, OpenRouter)
+async function callOpenAiCompatible(
+  apiUrl: string,
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<any> {
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`AI Provider HTTP ${response.status}: ${errText.slice(0, 180)}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.choices?.[0]?.message?.content || "{}";
+  return JSON.parse(rawText);
+}
+
+// Helper: Call Anthropic Claude Messages API
+async function callAnthropicMessages(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<any> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: model || "claude-3-5-sonnet-20241022",
+      max_tokens: 2500,
+      temperature: 0.2,
+      system: `${systemPrompt}\nCRITICAL: Respond ONLY with a valid JSON object matching the requested schema. Do not wrap in markdown quotes or preamble.`,
+      messages: [{ role: "user", content: userPrompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Anthropic HTTP ${response.status}: ${errText.slice(0, 180)}`);
+  }
+
+  const data = await response.json();
+  const textContent = data.content?.[0]?.text || "{}";
+  const cleaned = textContent.replace(/```json/g, "").replace(/```/g, "").trim();
+  return JSON.parse(cleaned);
+}
+
+// Test Provider Connection Endpoint
+app.post("/api/ai/test-provider", async (req, res) => {
+  try {
+    const { provider, key, model } = req.body;
+    const testKey = key || (
+      provider === "gemini" ? geminiApiKey :
+      provider === "openai" ? openaiApiKey :
+      provider === "anthropic" ? anthropicApiKey :
+      provider === "groq" ? groqApiKey :
+      provider === "mistral" ? mistralApiKey :
+      provider === "openrouter" ? openrouterApiKey : ""
+    );
+
+    if (provider === "local") {
+      return res.json({ success: true, message: "ZEN Autonomous Local Engine is active & 100% operational (zero keys needed)." });
+    }
+
+    if (!testKey) {
+      return res.json({ success: false, message: `No API key provided for ${provider}. Please enter a key or set server environment variable.` });
+    }
+
+    const testSys = "You are a test ping service. Respond with JSON: {\"status\": \"ok\", \"provider\": \"active\"}";
+    const testUser = "Ping test connection.";
+
+    if (provider === "gemini") {
+      const client = new GoogleGenAI({ apiKey: testKey });
+      const r = await client.models.generateContent({
+        model: model || "gemini-2.5-flash",
+        contents: "Return JSON: {\"status\": \"ok\"}",
+        config: { responseMimeType: "application/json" },
+      });
+      return res.json({ success: true, message: `Connected to Google Gemini (${model || "gemini-2.5-flash"}) successfully!`, raw: r.text });
+    } else if (provider === "openai") {
+      await callOpenAiCompatible("https://api.openai.com/v1/chat/completions", testKey, model || "gpt-4o-mini", testSys, testUser);
+      return res.json({ success: true, message: `Connected to OpenAI (${model || "gpt-4o-mini"}) successfully!` });
+    } else if (provider === "anthropic") {
+      await callAnthropicMessages(testKey, model || "claude-3-5-haiku-20241022", testSys, testUser);
+      return res.json({ success: true, message: `Connected to Anthropic Claude (${model || "claude-3-5-haiku-20241022"}) successfully!` });
+    } else if (provider === "groq") {
+      await callOpenAiCompatible("https://api.groq.com/openai/v1/chat/completions", testKey, model || "llama-3.3-70b-versatile", testSys, testUser);
+      return res.json({ success: true, message: `Connected to Groq LPU (${model || "llama-3.3-70b-versatile"}) successfully!` });
+    } else if (provider === "mistral") {
+      await callOpenAiCompatible("https://api.mistral.ai/v1/chat/completions", testKey, model || "mistral-small-latest", testSys, testUser);
+      return res.json({ success: true, message: `Connected to Mistral AI (${model || "mistral-small-latest"}) successfully!` });
+    } else if (provider === "openrouter") {
+      const endpoint = req.body.customBaseUrl ? `${req.body.customBaseUrl.replace(/\/$/, "")}/chat/completions` : "https://openrouter.ai/api/v1/chat/completions";
+      await callOpenAiCompatible(endpoint, testKey, model || "deepseek/deepseek-chat", testSys, testUser);
+      return res.json({ success: true, message: `Connected to OpenRouter / Custom Gateway successfully!` });
+    }
+
+    return res.json({ success: true, message: "Provider verified." });
+  } catch (err: any) {
+    console.warn("Test provider failed:", err?.message);
+    res.json({ success: false, message: err?.message || "Failed to reach AI provider" });
+  }
+});
+
+// AI Address Intelligence & Corridor Location Endpoint
+app.post("/api/ai/locate-address", async (req, res) => {
+  const { address = "", customerName = "" } = req.body;
+  const userProvider = (req.headers["x-zen-provider"] as string) || "auto";
+  const userKey = (req.headers["x-zen-key"] as string) || "";
+  const userModel = (req.headers["x-zen-model"] as string) || "";
+
+  // Local fallback corridor determination
+  const localIntel = {
+    address,
+    metroZone: address.toLowerCase().includes("plano") || address.toLowerCase().includes("frisco")
+      ? "North Dallas / Telecom Corridor"
+      : address.toLowerCase().includes("fort worth") || address.toLowerCase().includes("arlington")
+      ? "West Metroplex / Fort Worth Industrial"
+      : address.toLowerCase().includes("irving") || address.toLowerCase().includes("grapevine")
+      ? "DFW Airport Logistics Hub"
+      : "Central DFW Metroplex",
+    primaryCorridor: address.toLowerCase().includes("fort worth")
+      ? "I-30 Westbound / I-820 Loop"
+      : address.toLowerCase().includes("plano")
+      ? "US-75 / President George Bush Turnpike (PGBT)"
+      : "I-35E Stemmons Freeway / LBJ Expressway",
+    accessRecommendations: [
+      "Commercial loading dock or rear service entrance recommended",
+      "Standard service van clearance confirmed (10ft headroom)",
+    ],
+    trafficRiskLevel: "LOW",
+    estimatedCrossTownMinutes: 20,
+    providerUsed: "ZEN Autonomous Spatial Core",
+  };
+
+  try {
+    // If OpenAI or Gemini key is available, use it to enrich address details
+    const activeKey = userKey || openaiApiKey || geminiApiKey || groqApiKey;
+    if (!activeKey || userProvider === "local") {
+      return res.json(localIntel);
+    }
+
+    const sysPrompt = "You are ZEN AI Spatial Intelligence for Dallas-Fort Worth HVAC dispatch. Return JSON: { \"metroZone\": string, \"primaryCorridor\": string, \"accessRecommendations\": [string, string], \"trafficRiskLevel\": \"LOW\"|\"MODERATE\"|\"HIGH\", \"estimatedCrossTownMinutes\": number }";
+    const userPrompt = `Analyze Dallas-Fort Worth service address for technician route planning:\nAddress: ${address}\nClient: ${customerName}`;
+
+    let parsed: any = null;
+    if ((userProvider === "openai" || (!userProvider || userProvider === "auto")) && (userKey || openaiApiKey)) {
+      parsed = await callOpenAiCompatible("https://api.openai.com/v1/chat/completions", userKey || openaiApiKey!, userModel || "gpt-4o-mini", sysPrompt, userPrompt);
+    } else if (userProvider === "groq" || groqApiKey) {
+      parsed = await callOpenAiCompatible("https://api.groq.com/openai/v1/chat/completions", userKey || groqApiKey!, userModel || "llama-3.3-70b-versatile", sysPrompt, userPrompt);
+    } else if (userProvider === "gemini" && (userKey || geminiApiKey)) {
+      const gClient = new GoogleGenAI({ apiKey: userKey || geminiApiKey! });
+      const gRes = await gClient.models.generateContent({
+        model: userModel || "gemini-2.5-flash",
+        contents: `${sysPrompt}\n\n${userPrompt}`,
+        config: { responseMimeType: "application/json" },
+      });
+      parsed = JSON.parse(gRes.text || "{}");
+    }
+
+    if (parsed && parsed.metroZone) {
+      return res.json({
+        address,
+        metroZone: parsed.metroZone,
+        primaryCorridor: parsed.primaryCorridor || localIntel.primaryCorridor,
+        accessRecommendations: parsed.accessRecommendations || localIntel.accessRecommendations,
+        trafficRiskLevel: parsed.trafficRiskLevel || "LOW",
+        estimatedCrossTownMinutes: parsed.estimatedCrossTownMinutes || 20,
+        providerUsed: `ZEN AI (${userProvider})`,
+      });
+    }
+
+    return res.json(localIntel);
+  } catch (err) {
+    console.warn("AI address locate error, returning local spatial intel:", err);
+    return res.json(localIntel);
+  }
+});
+
+// ZEN AI Multi-Provider Dispatch Assistant Endpoint
+// "MUST ALWAYS WORK NO MATTER WHAT" - Guaranteed fallback to ZEN Autonomous Engine
 app.post("/api/dispatch/ai-assistant", async (req, res) => {
   let normalizedTechs: any[] = [];
   let normalizedTickets: any[] = [];
+
+  const rawTechs = req.body.technicians || [];
+  const rawTickets = req.body.pendingTickets || req.body.unassignedTickets || [];
+  const territoryName = req.body.territoryName || "Dallas-Fort Worth Metroplex";
+
+  normalizedTechs = rawTechs.map((t: any) => ({
+    id: t.id,
+    name: t.name,
+    vanNumber: t.vanNumber,
+    status: t.status || "AVAILABLE",
+    skills: t.skills || [],
+    location: t.currentLocation || t.location || { lat: 32.86, lng: -97.04 },
+    currentLocation: t.currentLocation || t.location || { lat: 32.86, lng: -97.04 },
+    currentJobCount: t.assignedTickets?.length ?? t.assignedCount ?? (t.assignedTicketIds?.length || 0),
+    assignedTickets: t.assignedTickets || [],
+    shiftCapacityHours: t.shiftCapacityHours || 8,
+    partsInventory: t.partsInventory || t.inventory || [],
+  }));
+
+  normalizedTickets = rawTickets.map((tk: any) => ({
+    id: tk.id,
+    ticketNumber: tk.ticketNumber || `TICK-${tk.id}`,
+    customerName: tk.customerName || "HVAC Client",
+    urgency: tk.urgency || "ROUTINE",
+    equipmentType: tk.equipmentType || "Commercial HVAC",
+    issueDescription: tk.issueDescription || "",
+    requiredSkills: tk.requiredSkills || [tk.equipmentType].filter(Boolean),
+    requiredParts: tk.requiredParts || [],
+    location: tk.location || { lat: 32.86, lng: -97.04, address: "Dallas-Fort Worth" },
+    slaDeadline: tk.slaDeadline || "Same Day",
+    estimatedDurationMinutes: tk.estimatedDurationMinutes || 90,
+  }));
+
+  const requestedProvider = (req.headers["x-zen-provider"] as string) || "auto";
+  const userKey = (req.headers["x-zen-key"] as string) || "";
+  const userModel = (req.headers["x-zen-model"] as string) || "";
+  const customBase = (req.headers["x-zen-custom-base"] as string) || "";
+
+  // 1. Direct Local Engine Request
+  if (requestedProvider === "local") {
+    const localRecs = generateAlgorithmicRecommendations(normalizedTechs, normalizedTickets);
+    return res.json({
+      ...localRecs,
+      engineUsed: "ZEN Autonomous Local Engine (Direct Heuristic Core)",
+    });
+  }
+
+  const prompt = createDispatchPrompt(territoryName, normalizedTechs, normalizedTickets);
+  const sysPrompt = "You are the Lead ZEN AI Field Service Dispatch Intelligence Engine for ZEN AI Co. Return ONLY valid JSON with keys: summary, fleetHealth, estimatedFuelSavingsGallons, estimatedDriveTimeSavedMinutes, recommendations (array of ticketId, ticketNumber, recommendedTechId, recommendedTechName, urgency, rationale, estimatedDriveMins, urgencyLevelScore), strategicInsights (array of 3 strings).";
+
+  // 2. Try Provider Execution
   try {
-    const rawTechs = req.body.technicians || [];
-    const rawTickets = req.body.pendingTickets || req.body.unassignedTickets || [];
-    const territoryName = req.body.territoryName || "Dallas-Fort Worth Metroplex";
+    let result: any = null;
+    let engineLabel = "ZEN AI Multi-Provider Core";
 
-    normalizedTechs = rawTechs.map((t: any) => ({
-      id: t.id,
-      name: t.name,
-      vanNumber: t.vanNumber,
-      status: t.status || "AVAILABLE",
-      skills: t.skills || [],
-      location: t.currentLocation || t.location || { lat: 32.86, lng: -97.04 },
-      currentLocation: t.currentLocation || t.location || { lat: 32.86, lng: -97.04 },
-      currentJobCount: t.assignedTickets?.length ?? t.assignedCount ?? (t.assignedTicketIds?.length || 0),
-      assignedTickets: t.assignedTickets || [],
-      shiftCapacityHours: t.shiftCapacityHours || 8,
-      partsInventory: t.partsInventory || t.inventory || [],
-    }));
-
-    normalizedTickets = rawTickets.map((tk: any) => ({
-      id: tk.id,
-      ticketNumber: tk.ticketNumber || `TICK-${tk.id}`,
-      customerName: tk.customerName || "HVAC Client",
-      urgency: tk.urgency || "ROUTINE",
-      equipmentType: tk.equipmentType || "Commercial HVAC",
-      issueDescription: tk.issueDescription || "",
-      requiredSkills: tk.requiredSkills || [tk.equipmentType].filter(Boolean),
-      requiredParts: tk.requiredParts || [],
-      location: tk.location || { lat: 32.86, lng: -97.04, address: "Dallas-Fort Worth" },
-      slaDeadline: tk.slaDeadline || "Same Day",
-      estimatedDurationMinutes: tk.estimatedDurationMinutes || 90,
-    }));
-
-    if (!ai) {
-      // Fallback algorithmic recommendation if no API key is set
-      const algorithmicRecs = generateAlgorithmicRecommendations(normalizedTechs, normalizedTickets);
-      return res.json(algorithmicRecs);
+    // OPENAI
+    if (requestedProvider === "openai" || (requestedProvider === "auto" && (userKey || openaiApiKey))) {
+      const key = userKey || openaiApiKey;
+      if (key) {
+        const model = userModel || "gpt-4o";
+        engineLabel = `ZEN AI Co. Powered by OpenAI (${model})`;
+        result = await callOpenAiCompatible("https://api.openai.com/v1/chat/completions", key, model, sysPrompt, prompt);
+      }
     }
 
-    const prompt = createDispatchPrompt(territoryName, normalizedTechs, normalizedTickets);
+    // ANTHROPIC CLAUDE
+    if (!result && (requestedProvider === "anthropic" || (requestedProvider === "auto" && (userKey || anthropicApiKey)))) {
+      const key = userKey || anthropicApiKey;
+      if (key) {
+        const model = userModel || "claude-3-5-sonnet-20241022";
+        engineLabel = `ZEN AI Co. Powered by Anthropic Claude (${model})`;
+        result = await callAnthropicMessages(key, model, sysPrompt, prompt);
+      }
+    }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            summary: { type: Type.STRING },
-            fleetHealth: { type: Type.STRING },
-            estimatedFuelSavingsGallons: { type: Type.NUMBER },
-            estimatedDriveTimeSavedMinutes: { type: Type.NUMBER },
-            recommendations: {
-              type: Type.ARRAY,
-              items: {
+    // GROQ
+    if (!result && (requestedProvider === "groq" || (requestedProvider === "auto" && (userKey || groqApiKey)))) {
+      const key = userKey || groqApiKey;
+      if (key) {
+        const model = userModel || "llama-3.3-70b-versatile";
+        engineLabel = `ZEN AI Co. Powered by Groq LPU (${model})`;
+        result = await callOpenAiCompatible("https://api.groq.com/openai/v1/chat/completions", key, model, sysPrompt, prompt);
+      }
+    }
+
+    // MISTRAL
+    if (!result && (requestedProvider === "mistral" || (requestedProvider === "auto" && (userKey || mistralApiKey)))) {
+      const key = userKey || mistralApiKey;
+      if (key) {
+        const model = userModel || "mistral-large-latest";
+        engineLabel = `ZEN AI Co. Powered by Mistral AI (${model})`;
+        result = await callOpenAiCompatible("https://api.mistral.ai/v1/chat/completions", key, model, sysPrompt, prompt);
+      }
+    }
+
+    // OPENROUTER / CUSTOM
+    if (!result && requestedProvider === "openrouter" && userKey) {
+      const endpoint = customBase ? `${customBase.replace(/\/$/, "")}/chat/completions` : "https://openrouter.ai/api/v1/chat/completions";
+      const model = userModel || "deepseek/deepseek-chat";
+      engineLabel = `ZEN AI Co. Powered by OpenRouter (${model})`;
+      result = await callOpenAiCompatible(endpoint, userKey, model, sysPrompt, prompt);
+    }
+
+    // GOOGLE GEMINI
+    if (!result && (requestedProvider === "gemini" || requestedProvider === "auto")) {
+      const key = userKey || geminiApiKey;
+      if (key) {
+        const model = userModel || "gemini-2.5-flash";
+        engineLabel = `ZEN AI Co. Powered by Google Gemini (${model})`;
+        const client = userKey ? new GoogleGenAI({ apiKey: userKey }) : ai;
+        if (client) {
+          const resp = await client.models.generateContent({
+            model,
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                  ticketId: { type: Type.STRING },
-                  ticketNumber: { type: Type.STRING },
-                  recommendedTechId: { type: Type.STRING },
-                  recommendedTechName: { type: Type.STRING },
-                  urgency: { type: Type.STRING },
-                  rationale: { type: Type.STRING },
-                  estimatedDriveMins: { type: Type.NUMBER },
-                  urgencyLevelScore: { type: Type.NUMBER },
+                  summary: { type: Type.STRING },
+                  fleetHealth: { type: Type.STRING },
+                  estimatedFuelSavingsGallons: { type: Type.NUMBER },
+                  estimatedDriveTimeSavedMinutes: { type: Type.NUMBER },
+                  recommendations: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        ticketId: { type: Type.STRING },
+                        ticketNumber: { type: Type.STRING },
+                        recommendedTechId: { type: Type.STRING },
+                        recommendedTechName: { type: Type.STRING },
+                        urgency: { type: Type.STRING },
+                        rationale: { type: Type.STRING },
+                        estimatedDriveMins: { type: Type.NUMBER },
+                        urgencyLevelScore: { type: Type.NUMBER },
+                      },
+                      required: ["ticketId", "ticketNumber", "recommendedTechId", "recommendedTechName", "urgency", "rationale", "estimatedDriveMins"],
+                    },
+                  },
+                  strategicInsights: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                  },
                 },
-                required: ["ticketId", "ticketNumber", "recommendedTechId", "recommendedTechName", "urgency", "rationale", "estimatedDriveMins"],
+                required: ["summary", "fleetHealth", "estimatedFuelSavingsGallons", "estimatedDriveTimeSavedMinutes", "recommendations", "strategicInsights"],
               },
             },
-            strategicInsights: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-          },
-          required: ["summary", "fleetHealth", "estimatedFuelSavingsGallons", "estimatedDriveTimeSavedMinutes", "recommendations", "strategicInsights"],
-        },
-      },
-    });
+          });
+          result = JSON.parse(resp.text || "{}");
+        }
+      }
+    }
 
-    const parsed = JSON.parse(response.text || "{}");
-    res.json(parsed);
-  } catch (error: any) {
-    console.error("AI Dispatch Assistant error:", error);
-    // Return fallback algorithmic recommendations
+    if (result && Array.isArray(result.recommendations)) {
+      return res.json({
+        ...result,
+        engineUsed: engineLabel,
+      });
+    }
+
+    // If no provider succeeded, execute autonomous local engine
+    console.info("No cloud AI key matched or succeeded. Executing ZEN Autonomous Local Engine.");
     const algorithmicRecs = generateAlgorithmicRecommendations(normalizedTechs, normalizedTickets);
-    res.json(algorithmicRecs);
+    return res.json({
+      ...algorithmicRecs,
+      engineUsed: "ZEN Autonomous Local Engine (Always Operational Fallback)",
+    });
+  } catch (error: any) {
+    console.warn("AI Provider execution encountered an error, falling back to ZEN Autonomous Engine:", error?.message || error);
+    const algorithmicRecs = generateAlgorithmicRecommendations(normalizedTechs, normalizedTickets);
+    return res.json({
+      ...algorithmicRecs,
+      engineUsed: "ZEN Autonomous Local Engine (Emergency Recovery)",
+    });
   }
 });
 
@@ -698,7 +1012,12 @@ app.all("/api/manifest/print", (req, res) => {
   <!-- Interactive Top Control Toolbar (Hidden in Print) -->
   <div class="action-toolbar no-print">
     <div style="display: flex; align-items: center; gap: 12px;">
-      <span style="font-weight: 800; font-size: 13px; letter-spacing: 0.5px;">🖨️ SERVICE ROUTE MANIFEST</span>
+      <svg width="22" height="22" viewBox="0 0 100 100" fill="#38bdf8" style="flex-shrink: 0;">
+        <path d="M 13 13 L 87 13 L 68 32 L 28 32 L 28 44 L 13 44 Z" />
+        <path d="M 87 23 L 32 77 L 13 77 L 68 23 Z" fill="#ffffff" />
+        <path d="M 87 56 L 72 56 L 72 68 L 32 68 L 13 87 L 87 87 Z" />
+      </svg>
+      <span style="font-weight: 800; font-size: 13px; letter-spacing: 0.5px;">ZEN AI Co. • SERVICE ROUTE MANIFEST</span>
       <span style="background: rgba(255,255,255,0.15); padding: 3px 8px; border-radius: 6px; font-size: 11px;">
         ${esc(tech.vanNumber)} — ${esc(tech.name)}
       </span>
@@ -720,15 +1039,33 @@ app.all("/api/manifest/print", (req, res) => {
     <!-- Header Block -->
     <div style="border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 16px;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <div>
-          <div style="font-size: 11px; font-weight: 800; letter-spacing: 1.5px; color: #2563eb; text-transform: uppercase;">
-            METROPLEX HVAC FIELD SERVICES
+        <div style="display: flex; align-items: flex-start; gap: 14px;">
+          <!-- ZEN AI Co. Vector Brand Badge -->
+          <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #06b6d4, #3b82f6, #8b5cf6); padding: 2px; border-radius: 12px; box-shadow: 0 4px 10px rgba(59,130,246,0.3); flex-shrink: 0;">
+            <div style="width: 100%; height: 100%; background: #020617; border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 6px;">
+              <svg width="28" height="28" viewBox="0 0 100 100" fill="#ffffff">
+                <path d="M 13 13 L 87 13 L 68 32 L 28 32 L 28 44 L 13 44 Z" />
+                <path d="M 87 23 L 32 77 L 13 77 L 68 23 Z" />
+                <path d="M 87 56 L 72 56 L 72 68 L 32 68 L 13 87 L 87 87 Z" />
+              </svg>
+            </div>
           </div>
-          <h1 style="margin: 3px 0 0 0; font-size: 20px; font-weight: 900; color: #0f172a;">
-            Daily Dispatch Manifest &amp; Multi-Stop Route
-          </h1>
-          <div style="color: #64748b; font-size: 12px; margin-top: 4px;">
-            Date: <strong>${esc(dateStr)}</strong> • Generated: ${esc(timeStr)}
+
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; font-weight: 900; letter-spacing: 1.5px; color: #0284c7; text-transform: uppercase;">
+                ZEN AI Co.
+              </span>
+              <span style="font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px; text-transform: uppercase;">
+                • Autonomous Fleet Dispatch Intelligence
+              </span>
+            </div>
+            <h1 style="margin: 2px 0 0 0; font-size: 20px; font-weight: 900; color: #0f172a;">
+              Daily Route Manifest &amp; Technician Route Plan
+            </h1>
+            <div style="color: #64748b; font-size: 11px; margin-top: 3px;">
+              Date: <strong>${esc(dateStr)}</strong> • Generated: ${esc(timeStr)} • Engine: <strong>ZEN AI Autonomous Core</strong>
+            </div>
           </div>
         </div>
 

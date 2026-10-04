@@ -53,6 +53,116 @@
   scrollbar-width: none;
 }
 
+/* ZEN AI Graphical Animations */
+@keyframes zen-route-flow {
+  from {
+    stroke-dashoffset: 64;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes zen-radar-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes zen-radar-pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes zen-traffic-pulse {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes zen-beacon-shockwave {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+.animate-zen-flow {
+  animation: zen-route-flow 1.4s linear infinite;
+}
+
+.animate-zen-flow-slow {
+  animation: zen-route-flow 2.8s linear infinite;
+}
+
+.animate-zen-radar-spin {
+  animation: zen-radar-spin 8s linear infinite;
+}
+
+.animate-zen-traffic {
+  animation: zen-traffic-pulse 2.2s linear infinite;
+}
+
+.animate-zen-shockwave {
+  animation: zen-beacon-shockwave 1.8s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+}
+
+/* 3D Command Table Perspective Mode */
+.tactical-3d-stage {
+  perspective: 1100px;
+  perspective-origin: 50% 50%;
+}
+
+.tactical-3d-plane {
+  transform: rotateX(24deg) rotateZ(-3deg) scale(0.94);
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 35px 80px -15px rgba(0, 0, 0, 0.7);
+}
+
+.tactical-3d-counter {
+  transform: rotateX(-24deg) rotateZ(3deg);
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Glassmorphism & Cyber Command Styling */
+.zen-glass-panel {
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+}
+
+.zen-glass-light {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+}
+
+
 /* Print styles: Ensure that printing from the main window cleanly prints ONLY the manifest modal */
 @media print {
   /* Hide all background app chrome and map elements */

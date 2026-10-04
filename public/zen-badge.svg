@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <!-- Iridescent Rim Gradient (Cyan -> Blue -> Purple -> Emerald) -->
+    <linearGradient id="zenRimGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06B6D4" />
+      <stop offset="40%" stop-color="#3B82F6" />
+      <stop offset="75%" stop-color="#8B5CF6" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+    <!-- Metallic Inner Depth Gradient -->
+    <radialGradient id="zenMetallicDark" cx="50%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#1E293B" />
+      <stop offset="60%" stop-color="#090D16" />
+      <stop offset="100%" stop-color="#020617" />
+    </radialGradient>
+    <filter id="zenShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Squircle with glowing border -->
+  <rect x="6" y="6" width="108" height="108" rx="26" ry="26" fill="url(#zenRimGlow)" filter="url(#zenShadow)" />
+  <!-- Inner Dark Brushed Titanium Face -->
+  <rect x="8" y="8" width="104" height="104" rx="24" ry="24" fill="url(#zenMetallicDark)" />
+
+  <!-- ZEN Geometric Monogram Glyph -->
+  <g transform="translate(10, 10)">
+    <path d="M 13 13 L 87 13 L 68 32 L 28 32 L 28 44 L 13 44 Z" fill="#F8FAFC" />
+    <path d="M 87 23 L 32 77 L 13 77 L 68 23 Z" fill="#FFFFFF" />
+    <path d="M 87 56 L 72 56 L 72 68 L 32 68 L 13 87 L 87 87 Z" fill="#F8FAFC" />
+  </g>
+</svg>

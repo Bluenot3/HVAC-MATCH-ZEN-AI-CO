@@ -15,6 +15,9 @@ import { DailyManifestModal } from './components/DailyManifestModal';
 import { NewTicketModal } from './components/NewTicketModal';
 import { FleetSimulationBar } from './components/FleetSimulationBar';
 import { useFleetSimulation } from './hooks/useFleetSimulation';
+import { ZenLogo } from './components/brand/ZenLogo';
+import { ZenAiSettingsModal } from './components/ZenAiSettingsModal';
+import { zenAi, AI_PROVIDERS } from './services/aiProviderService';
 import { 
   Truck, 
   Flame, 
@@ -35,7 +38,9 @@ import {
   PanelRightClose,
   PanelRightOpen,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Cpu,
+  Settings
 } from 'lucide-react';
 
 export function App() {
@@ -147,6 +152,8 @@ export function App() {
 
   // Modals state
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [isZenSettingsOpen, setIsZenSettingsOpen] = useState(false);
+  const [activeAiProvider, setActiveAiProvider] = useState(zenAi.getActiveProvider());
   const [manifestTech, setManifestTech] = useState<Technician | null>(null);
   const [isNewTicketModalOpen, setIsNewTicketModalOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -490,23 +497,22 @@ export function App() {
             id="global-header"
             className="h-14 min-h-[56px] landscape:max-md:h-11 landscape:max-md:min-h-[44px] px-2 sm:px-3 md:px-4 lg:px-5 bg-white border-b border-slate-200 flex items-center justify-between flex-shrink-0 z-20 shadow-xs gap-1.5 sm:gap-2.5 md:gap-3 overflow-x-auto no-scrollbar"
           >
-            {/* Brand & Identity */}
-            <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-shrink">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs flex-shrink-0">
-                <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </div>
+            {/* ZEN AI Co. Brand & Identity */}
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-shrink">
+              <ZenLogo size={32} variant="badge" />
               <div className="flex flex-col justify-center min-w-0">
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <h1 className="text-xs sm:text-sm md:text-base font-bold tracking-tight text-slate-800 leading-tight truncate">
-                    <span className="hidden sm:inline">HVAC Dispatch Pro</span>
-                    <span className="sm:hidden">HVAC Dispatch</span>
+                  <h1 className="text-xs sm:text-sm md:text-base font-extrabold tracking-tight text-slate-900 leading-tight truncate flex items-center">
+                    <span>ZEN<span className="text-blue-600">AI</span> Co.</span>
+                    <span className="mx-1 text-slate-300 hidden sm:inline">•</span>
+                    <span className="hidden sm:inline font-bold text-slate-700">Dispatch Pro</span>
                   </h1>
-                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold text-[9px] uppercase tracking-wider leading-none hidden xl:inline-block">
-                    DFW Metroplex
+                  <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-bold text-[9px] uppercase tracking-wider border border-blue-200 leading-none hidden xl:inline-block">
+                    DFW Fleet
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-500 leading-tight whitespace-nowrap hidden 2xl:block">
-                  15 Fleet Vans • Live Routes API & AI Dispatch
+                <p className="text-[10px] text-slate-500 leading-tight whitespace-nowrap hidden 2xl:block font-medium">
+                  Powered by ZEN AI Co. Autonomous Field Intelligence
                 </p>
               </div>
             </div>
@@ -669,16 +675,33 @@ export function App() {
                 )}
               </button>
 
+              {/* AI Engine Status & Configuration Trigger */}
+              <button
+                id="topbar-ai-settings-btn"
+                onClick={() => setIsZenSettingsOpen(true)}
+                className="min-h-[34px] sm:min-h-[36px] landscape:max-md:min-h-[32px] px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer flex-shrink-0"
+                title="Configure Multi-Provider AI (OpenAI, Gemini, Claude, Groq, Mistral, Local Engine)"
+                aria-label="ZEN AI Provider Settings"
+              >
+                <Cpu className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="hidden sm:inline text-slate-800 font-bold text-[11px]">
+                  {AI_PROVIDERS[activeAiProvider]?.name?.split(' ')[0] || 'ZEN AI'}
+                </span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-blue-100 text-blue-800 font-mono font-bold">
+                  AI
+                </span>
+              </button>
+
               {/* AI Dispatch Assistant Button - Always fully visible, never clipped or cut off */}
               <button
                 id="topbar-ai-dispatcher-btn"
                 onClick={() => setIsAiModalOpen(true)}
-                className="min-h-[34px] sm:min-h-[36px] landscape:max-md:min-h-[32px] px-2.5 sm:px-3 py-1 sm:py-1.5 landscape:max-md:py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs active:scale-95 transition-all whitespace-nowrap cursor-pointer flex-shrink-0"
-                aria-label="Open AI Dispatch Assistant"
-                title="Open AI Dispatch Assistant"
+                className="min-h-[34px] sm:min-h-[36px] landscape:max-md:min-h-[32px] px-2.5 sm:px-3 py-1 sm:py-1.5 landscape:max-md:py-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs active:scale-95 transition-all whitespace-nowrap cursor-pointer flex-shrink-0"
+                aria-label="Open ZEN AI Dispatch Assistant"
+                title="Open ZEN AI Dispatch Assistant"
               >
-                <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-200 shrink-0" aria-hidden="true" />
-                <span className="font-semibold">AI Dispatch</span>
+                <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-200 shrink-0" aria-hidden="true" />
+                <span className="font-semibold">ZEN AI Dispatch</span>
               </button>
             </div>
           </header>
@@ -948,6 +971,18 @@ export function App() {
           isOpen={isNewTicketModalOpen}
           onClose={() => setIsNewTicketModalOpen(false)}
           onCreateTicket={handleCreateTicket}
+        />
+
+        {/* ZEN AI Multi-Provider Configuration Modal */}
+        <ZenAiSettingsModal
+          isOpen={isZenSettingsOpen}
+          onClose={() => {
+            setIsZenSettingsOpen(false);
+            setActiveAiProvider(zenAi.getActiveProvider());
+          }}
+          onProviderChanged={(newProv) => {
+            setActiveAiProvider(newProv);
+          }}
         />
       </div>
   );

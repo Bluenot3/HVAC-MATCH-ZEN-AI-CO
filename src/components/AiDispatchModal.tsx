@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Technician, ServiceTicket, AIAnalysisResult, AIRecommendation } from '../types/dispatch';
+import { Technician, ServiceTicket, AIRecommendation } from '../types/dispatch';
+import { AiProviderId, ZenDispatchAnalysis } from '../types/zenAi';
+import { AI_PROVIDERS, zenAi } from '../services/aiProviderService';
+import { ZenLogo } from './brand/ZenLogo';
+import { ZenAiSettingsModal } from './ZenAiSettingsModal';
 import { 
   Sparkles, 
   CheckCircle2, 
@@ -14,7 +18,11 @@ import {
   Loader2, 
   RefreshCw, 
   AlertCircle,
-  X 
+  X,
+  Settings,
+  ShieldCheck,
+  Zap,
+  Cpu
 } from 'lucide-react';
 
 interface AiDispatchModalProps {
@@ -35,400 +43,392 @@ export const AiDispatchModal: React.FC<AiDispatchModalProps> = ({
   onApplySingleRecommendation,
 }) => {
   const [loading, setLoading] = useState(false);
-  const [aiResult, setAiResult] = useState<AIAnalysisResult | null>(null);
+  const [aiResult, setAiResult] = useState<ZenDispatchAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
+  const [activeProvider, setActiveProvider] = useState<AiProviderId>(zenAi.getActiveProvider());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Sync state on open
+  useEffect(() => {
+    if (isOpen) {
+      setActiveProvider(zenAi.getActiveProvider());
+      setTimeout(() => {
+        closeBtnRef.current?.focus();
+      }, 50);
+    }
+  }, [isOpen]);
 
   // Keyboard navigation: Escape key closes modal (WCAG 2.1.2)
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !isSettingsOpen) {
         e.preventDefault();
         onClose();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    // Focus close button on open
-    setTimeout(() => {
-      closeBtnRef.current?.focus();
-    }, 50);
-
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, isSettingsOpen, onClose]);
 
   if (!isOpen) return null;
 
-  const unassignedTickets = tickets.filter((t) => !t.assignedTechId);
+  const unassignedTickets = tickets.filter((t) => !t.assignedTechId && t.status !== 'COMPLETED');
+
+  const handleProviderSelect = (newProvider: AiProviderId) => {
+    setActiveProvider(newProvider);
+    zenAi.setActiveProvider(newProvider);
+  };
 
   const runAiOptimization = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/dispatch/ai-assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          territoryName: "Dallas-Fort Worth Metroplex",
-          technicians: technicians.map((t) => ({
-            id: t.id,
-            name: t.name,
-            vanNumber: t.vanNumber,
-            skills: t.skills,
-            status: t.status,
-            currentLocation: t.currentLocation,
-            assignedTickets: t.assignedTicketIds,
-            assignedCount: t.assignedTicketIds.length,
-            shiftCapacityHours: t.shiftCapacityHours || 8,
-            partsInventory: t.partsInventory,
-            inventory: t.partsInventory.map((i) => i.name),
-          })),
-          pendingTickets: unassignedTickets.map((t) => ({
-            id: t.id,
-            ticketNumber: t.ticketNumber,
-            customerName: t.customerName,
-            urgency: t.urgency,
-            equipmentType: t.equipmentType,
-            faultCode: t.faultCode,
-            issueDescription: t.issueDescription,
-            location: t.location,
-            requiredSkills: t.requiredSkills,
-            slaDeadline: t.slaDeadline,
-            estimatedDurationMinutes: t.estimatedDurationMinutes,
-          })),
-          unassignedTickets: unassignedTickets.map((t) => ({
-            id: t.id,
-            ticketNumber: t.ticketNumber,
-            customerName: t.customerName,
-            urgency: t.urgency,
-            equipmentType: t.equipmentType,
-            faultCode: t.faultCode,
-            issueDescription: t.issueDescription,
-            location: t.location,
-            requiredSkills: t.requiredSkills,
-            slaDeadline: t.slaDeadline,
-          })),
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`AI Optimization API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setAiResult(data);
+      const result = await zenAi.computeDispatchAnalysis(technicians, tickets);
+      setAiResult(result);
     } catch (err: any) {
-      console.error('Failed to run AI dispatch:', err);
-      // Generate intelligent client-side fallback recommendations
-      generateFallbackAiRecommendations();
+      console.error('Failed to run ZEN AI dispatch:', err);
+      setError('Encountered an issue running cloud AI model; switching to ZEN Autonomous Engine.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Algorithmic heuristic fallback if offline or during local development
-  const generateFallbackAiRecommendations = () => {
-    const recs: AIRecommendation[] = [];
-
-    unassignedTickets.forEach((ticket) => {
-      // Find the best technician matching skills or closest location
-      const candidates = [...technicians].sort((a, b) => {
-        const aHasSkill = a.skills.some((s) => ticket.requiredSkills.includes(s)) ? 1 : 0;
-        const bHasSkill = b.skills.some((s) => ticket.requiredSkills.includes(s)) ? 1 : 0;
-        if (aHasSkill !== bHasSkill) return bHasSkill - aHasSkill;
-        return a.assignedTicketIds.length - b.assignedTicketIds.length;
-      });
-
-      const bestTech = candidates[0] || technicians[0];
-
-      recs.push({
-        ticketId: ticket.id,
-        ticketNumber: ticket.ticketNumber,
-        recommendedTechId: bestTech.id,
-        recommendedTechName: `${bestTech.vanNumber} (${bestTech.name})`,
-        urgency: ticket.urgency,
-        rationale: `Optimal proximity (${bestTech.currentLocation.address}) with certified expertise in ${ticket.equipmentType}.`,
-        estimatedDriveMins: Math.floor(Math.random() * 15) + 10,
-        urgencyLevelScore: ticket.urgency === 'EMERGENCY' ? 95 : ticket.urgency === 'SAME_DAY' ? 80 : 65,
-      });
-    });
-
-    setAiResult({
-      summary: `Analyzed ${unassignedTickets.length} pending service tickets against active fleet availability, parts inventories, and regional traffic zones. Recommended assignments reduce aggregate fleet detour travel.`,
-      fleetHealth: 'Fleet operating at 78% optimal utilization across DFW corridors.',
-      estimatedFuelSavingsGallons: Math.round(unassignedTickets.length * 1.8 * 10) / 10,
-      estimatedDriveTimeSavedMinutes: unassignedTickets.length * 22,
-      recommendations: recs,
-      strategicInsights: [
-        'High density of emergency chillers in North Dallas sector during morning heat wave peak.',
-        'Pre-staging Van 103 and Van 106 near Fort Worth loop eliminates crossover travel.',
-        'Parts availability in Van 101 and 104 matches urgent compressor and expansion valve requirements.',
-      ],
-    });
-  };
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="ai-dispatch-modal-title"
-      aria-describedby="ai-dispatch-modal-desc"
-    >
-      <div 
-        ref={modalRef}
-        className="w-full max-w-4xl max-h-[90vh] bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-900 font-sans"
+    <>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ai-dispatch-modal-title"
+        onClick={onClose}
       >
-        {/* Modal Header */}
-        <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-xs flex-shrink-0" aria-hidden="true">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 id="ai-dispatch-modal-title" className="font-bold text-base text-slate-900">
-                  AI Dispatch & Route Optimization Assistant
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-50 text-blue-700 border border-blue-200 font-semibold">
-                  Gemini Flash + Routes API
-                </span>
+        <div
+          className="w-full max-w-4xl max-h-[90vh] bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-900 font-sans"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Modal Header */}
+          <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <ZenLogo size={38} variant="badge" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 id="ai-dispatch-modal-title" className="font-extrabold text-base sm:text-lg tracking-tight flex items-center gap-1.5">
+                    ZEN AI Co. • Dispatch Intelligence
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-bold border border-blue-400/30">
+                    Multi-Model
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Autonomous HVAC Route Optimization • Works With Multiple AI Providers &amp; Guaranteed Local Fallback
+                </p>
               </div>
-              <p id="ai-dispatch-modal-desc" className="text-xs text-slate-600">
-                Evaluating technician certifications, van spare parts, SLA deadlines, and live traffic matrix.
-              </p>
+            </div>
+
+            {/* Provider Switcher & Settings Trigger */}
+            <div className="flex items-center gap-2">
+              {/* Provider Quick Dropdown */}
+              <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1 text-xs">
+                <Cpu className="w-3.5 h-3.5 text-blue-400" />
+                <select
+                  value={activeProvider}
+                  onChange={(e) => handleProviderSelect(e.target.value as AiProviderId)}
+                  className="bg-transparent text-white text-xs font-semibold focus:outline-none cursor-pointer pr-1"
+                  aria-label="Select AI Intelligence Provider"
+                >
+                  <option value="auto" className="bg-slate-900 text-white">ZEN AI Auto Router</option>
+                  <option value="openai" className="bg-slate-900 text-white">OpenAI (GPT-4o)</option>
+                  <option value="gemini" className="bg-slate-900 text-white">Google Gemini</option>
+                  <option value="anthropic" className="bg-slate-900 text-white">Anthropic Claude</option>
+                  <option value="groq" className="bg-slate-900 text-white">Groq LPU (Sub-Second)</option>
+                  <option value="mistral" className="bg-slate-900 text-white">Mistral AI</option>
+                  <option value="openrouter" className="bg-slate-900 text-white">OpenRouter / DeepSeek</option>
+                  <option value="local" className="bg-slate-900 text-white">ZEN Autonomous Core (Offline)</option>
+                </select>
+              </div>
+
+              {/* Configure API Keys Button */}
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="min-h-[36px] px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700 cursor-pointer"
+                title="Configure AI Provider Keys &amp; Models"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Keys</span>
+              </button>
+
+              <button
+                ref={closeBtnRef}
+                onClick={onClose}
+                className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
 
-          <button
-            ref={closeBtnRef}
-            onClick={onClose}
-            className="min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/80 transition-colors flex items-center justify-center cursor-pointer"
-            aria-label="Close AI Dispatch modal"
-          >
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
-        </div>
-
-        {/* Modal Body */}
-        <div className="p-4 sm:p-5 flex-1 overflow-y-auto bg-white">
-          {!aiResult && !loading && (
-            <div className="py-10 px-4 text-center flex flex-col items-center max-w-lg mx-auto">
-              <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 mb-4 shadow-xs" aria-hidden="true">
-                <Sparkles className="w-8 h-8" />
-              </div>
-              <h3 className="font-bold text-lg text-slate-900 mb-2">
-                Optimize {unassignedTickets.length} Pending HVAC Service Tickets
-              </h3>
-              <p className="text-xs text-slate-600 mb-6 leading-relaxed">
-                The AI assistant will cross-reference technician live GPS positions, HVAC certification tiers (EPA Universal, Chiller Level III, VRF Specialists), van onboard spare parts, and compute fuel-efficient stop sequences.
-              </p>
-
-              <button
-                id="trigger-ai-analysis-btn"
-                onClick={runAiOptimization}
-                disabled={unassignedTickets.length === 0}
-                className={`min-h-[44px] px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all ${
-                  unassignedTickets.length === 0
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white active:scale-95 cursor-pointer'
-                }`}
-                aria-label="Run fleet route optimization analysis"
-              >
-                <Sparkles className="w-4 h-4" aria-hidden="true" />
-                <span>{unassignedTickets.length === 0 ? 'No Unassigned Tickets' : 'Run Fleet Optimization Analysis'}</span>
-              </button>
-            </div>
-          )}
-
-          {loading && (
-            <div className="py-16 text-center flex flex-col items-center" role="status" aria-live="polite">
-              <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" aria-hidden="true" />
-              <h4 className="font-bold text-base text-slate-800 mb-1">
-                Analyzing Territory & Computing Routes...
-              </h4>
-              <p className="text-xs text-slate-600 max-w-sm">
-                Querying Google Routes API matrix and evaluating scheduling logic for 15 service vans.
-              </p>
-            </div>
-          )}
-
-          {aiResult && !loading && (
-            <div className="flex flex-col gap-5">
-              {/* Top Impact KPI Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-                    <Fuel className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-slate-500 font-semibold">Fuel Savings</div>
-                    <div className="text-lg font-mono font-extrabold text-emerald-700">
-                      ~{aiResult.estimatedFuelSavingsGallons} gal
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-                    <TrendingDown className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-slate-500 font-semibold">Drive Time Saved</div>
-                    <div className="text-lg font-mono font-extrabold text-blue-700">
-                      {aiResult.estimatedDriveTimeSavedMinutes} mins
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-slate-500 font-semibold">AI Recommendations</div>
-                    <div className="text-lg font-mono font-extrabold text-indigo-700">
-                      {aiResult.recommendations.length} tickets
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Summary Description Box */}
-              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 text-xs text-blue-900 leading-relaxed">
-                <span className="font-bold text-blue-950">AI Strategy Summary: </span>
-                {aiResult.summary}
-              </div>
-
-              {/* Recommended Assignments Table */}
+          {/* Modal Body */}
+          <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 sm:space-y-6 no-scrollbar bg-slate-50">
+            {/* Status / Overview Card */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">
-                    Recommended Ticket Assignments:
-                  </h4>
-                  <span className="text-[11px] text-slate-500">
-                    Calculated for zero deadhead miles
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Live Dispatch Status
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold">
+                    DFW Metroplex Zone
                   </span>
                 </div>
-
-                <div className="flex flex-col gap-2">
-                  {aiResult.recommendations.map((rec) => {
-                    const ticket = tickets.find((t) => t.id === rec.ticketId);
-                    return (
-                      <div
-                        key={rec.ticketId}
-                        className="p-3 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition-all"
-                      >
-                        <div className="flex items-start gap-2.5 flex-1">
-                          <div className="pt-0.5">
-                            {rec.urgency === 'EMERGENCY' ? (
-                              <Flame className="w-4 h-4 text-red-600 animate-pulse" />
-                            ) : rec.urgency === 'SAME_DAY' ? (
-                              <Clock className="w-4 h-4 text-amber-600" />
-                            ) : (
-                              <Wrench className="w-4 h-4 text-blue-600" />
-                            )}
-                          </div>
-
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="font-mono font-bold text-slate-800">{rec.ticketNumber}</span>
-                              <span className="text-slate-600 font-semibold">
-                                {ticket?.customerName || 'Service Call'}
-                              </span>
-                              <ArrowRight className="w-3 h-3 text-slate-400" />
-                              <span className="font-bold text-blue-700">
-                                {rec.recommendedTechName}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 leading-relaxed">
-                              {rec.rationale}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-end gap-2 flex-shrink-0">
-                          <span className="font-mono text-[11px] text-slate-500">
-                            ⏱️ ~{rec.estimatedDriveMins}m drive
-                          </span>
-                          <button
-                            onClick={() => onApplySingleRecommendation(rec)}
-                            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1 transition-colors shadow-2xs"
-                          >
-                            <span>Assign</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <h3 className="text-lg font-black text-slate-900 mt-1">
+                  {unassignedTickets.length} Pending Service Calls Awaiting Dispatch
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  15 Active HVAC Fleet Vans • Live Corridor Traffic &amp; Technician Certifications
+                </p>
               </div>
 
-              {/* Strategic Insights */}
-              {aiResult.strategicInsights && (
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-amber-800 mb-2">
-                    <Lightbulb className="w-4 h-4 text-amber-600" />
-                    <span>Fleet Logistics Insights & Predictive Advisory</span>
-                  </div>
-                  <ul className="space-y-1 text-xs text-slate-600 list-disc list-inside">
-                    {aiResult.strategicInsights.map((insight, idx) => (
-                      <li key={idx}>{insight}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <button
+                onClick={runAiOptimization}
+                disabled={loading || unassignedTickets.length === 0}
+                className={`min-h-[44px] px-5 py-2.5 rounded-xl text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-md transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
+                  loading
+                    ? 'bg-blue-400 cursor-wait'
+                    : unassignedTickets.length === 0
+                    ? 'bg-slate-300 cursor-not-allowed text-slate-500'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                }`}
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Analyzing Fleet Corridors...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-cyan-200" />
+                    <span>Generate AI Optimization</span>
+                  </>
+                )}
+              </button>
             </div>
-          )}
-        </div>
 
-        {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between flex-wrap gap-2">
-          <button
-            onClick={() => {
-              setAiResult(null);
-              runAiOptimization();
-            }}
-            disabled={loading}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-            aria-label="Re-run AI route optimization analysis"
-          >
-            <RefreshCw className="w-4 h-4" aria-hidden="true" />
-            <span>Re-Analyze</span>
-          </button>
+            {error && (
+              <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
-          <div className="flex items-center gap-2">
+            {/* Analysis Results View */}
+            {aiResult && (
+              <div className="space-y-4 animate-fadeIn">
+                {/* Engine Stamp Bar */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between flex-wrap gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-600" />
+                    <span className="font-bold text-slate-900">{aiResult.engineUsed}</span>
+                    {aiResult.responseTimeMs && (
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        ({aiResult.responseTimeMs}ms)
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-semibold text-[11px]">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>High Reliability Dispatch SLA</span>
+                  </div>
+                </div>
+
+                {/* KPI Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                    <div className="text-xs text-slate-500 flex items-center gap-1.5 mb-1">
+                      <Fuel className="w-4 h-4 text-emerald-600" />
+                      <span>Estimated Fuel Saved</span>
+                    </div>
+                    <div className="text-xl font-black text-slate-900 font-mono">
+                      ~{aiResult.estimatedFuelSavingsGallons} Gal
+                    </div>
+                    <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                      Reduced cross-town deadhead miles
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                    <div className="text-xs text-slate-500 flex items-center gap-1.5 mb-1">
+                      <TrendingDown className="w-4 h-4 text-blue-600" />
+                      <span>Drive Time Saved</span>
+                    </div>
+                    <div className="text-xl font-black text-slate-900 font-mono">
+                      {aiResult.estimatedDriveTimeSavedMinutes} Mins
+                    </div>
+                    <div className="text-[10px] text-blue-700 font-semibold mt-0.5">
+                      Freeway corridor grouping
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                    <div className="text-xs text-slate-500 flex items-center gap-1.5 mb-1">
+                      <Truck className="w-4 h-4 text-indigo-600" />
+                      <span>Fleet Utilization</span>
+                    </div>
+                    <div className="text-xl font-black text-slate-900 font-mono">
+                      {aiResult.fleetHealth}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      Balanced 8-hour shift capacity
+                    </div>
+                  </div>
+                </div>
+
+                {/* Strategic Insights */}
+                {aiResult.strategicInsights && aiResult.strategicInsights.length > 0 && (
+                  <div className="bg-indigo-50/70 border border-indigo-200 p-4 rounded-xl">
+                    <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs uppercase tracking-wider mb-2">
+                      <Lightbulb className="w-4 h-4 text-indigo-600" />
+                      <span>ZEN AI Strategic Recommendations</span>
+                    </div>
+                    <ul className="space-y-1.5 text-xs text-indigo-950">
+                      {aiResult.strategicInsights.map((insight, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <span className="text-indigo-600 font-bold">•</span>
+                          <span>{insight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Recommendations List */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Individual Route Recommendations ({aiResult.recommendations.length})
+                    </h4>
+
+                    {aiResult.recommendations.length > 0 && (
+                      <button
+                        onClick={() => {
+                          onBatchApplyRecommendations(aiResult.recommendations);
+                          onClose();
+                        }}
+                        className="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Apply All ({aiResult.recommendations.length})</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {aiResult.recommendations.map((rec) => {
+                      const matchedTicket = tickets.find((t) => t.id === rec.ticketId);
+                      const isEmergency = rec.urgency === 'EMERGENCY';
+                      const isSameDay = rec.urgency === 'SAME_DAY';
+
+                      return (
+                        <div
+                          key={rec.ticketId}
+                          className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs hover:border-blue-300 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold text-white flex items-center gap-1 ${
+                                  isEmergency
+                                    ? 'bg-red-600'
+                                    : isSameDay
+                                    ? 'bg-amber-600'
+                                    : 'bg-blue-600'
+                                }`}
+                              >
+                                {isEmergency && <Flame className="w-3 h-3 text-white" />}
+                                {isSameDay && <Clock className="w-3 h-3 text-white" />}
+                                {rec.urgency}
+                              </span>
+
+                              <span className="font-mono font-bold text-xs text-slate-800">
+                                {rec.ticketNumber}
+                              </span>
+
+                              {matchedTicket && (
+                                <span className="text-xs font-semibold text-slate-700 truncate">
+                                  {matchedTicket.customerName}
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                              {rec.rationale}
+                            </p>
+
+                            <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-2 font-medium flex-wrap">
+                              <span className="text-blue-700 font-semibold flex items-center gap-1">
+                                <Truck className="w-3.5 h-3.5" />
+                                Recommended: <strong>{rec.recommendedTechName}</strong>
+                              </span>
+                              <span>•</span>
+                              <span>Est. Transit: ~{rec.estimatedDriveMins} mins</span>
+                              {rec.corridorAdvantage && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-emerald-700">{rec.corridorAdvantage}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              onApplySingleRecommendation(rec);
+                            }}
+                            className="min-h-[38px] px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-800 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap self-end sm:self-center"
+                          >
+                            <span>Assign</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Modal Footer */}
+          <div className="p-4 border-t border-slate-200 bg-white flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-slate-500">
+              <ZenLogo size={20} variant="badge" />
+              <span>Powered by <strong>ZEN AI Co.</strong> Field Logistics</span>
+            </div>
+
             <button
               onClick={onClose}
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-800 font-semibold text-xs transition-colors cursor-pointer"
-              aria-label="Cancel and close AI Dispatch Assistant"
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold cursor-pointer"
             >
-              Cancel
+              Close
             </button>
-
-            {aiResult && aiResult.recommendations.length > 0 && (
-              <button
-                id="apply-all-ai-recommendations-btn"
-                onClick={() => {
-                  onBatchApplyRecommendations(aiResult.recommendations);
-                  onClose();
-                }}
-                className="min-h-[44px] px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
-                aria-label={`Apply all ${aiResult.recommendations.length} AI dispatch recommendations`}
-              >
-                <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-                <span>Apply All ({aiResult.recommendations.length}) AI Dispatches</span>
-              </button>
-            )}
           </div>
         </div>
       </div>
-    </div>
+
+      {/* AI Provider Settings Modal */}
+      <ZenAiSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onProviderChanged={setActiveProvider}
+      />
+    </>
   );
 };

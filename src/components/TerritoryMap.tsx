@@ -5,6 +5,8 @@ import { HVAC_DEPOTS } from '../data/hvacData';
 import { decodePolyline } from '../services/routesApi';
 import { reverseGeocode, GeocodedAddress } from '../services/geocodingService';
 import { MapErrorBoundary } from './MapErrorBoundary';
+import { ZenLogo } from './brand/ZenLogo';
+import { TacticalTerritoryCanvas } from './map/TacticalTerritoryCanvas';
 import { 
   Flame, 
   Clock, 
@@ -384,31 +386,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({
 
   const isMapFallbackActive = isMapsAuthError || localMapError;
 
-  // Fallback vector map pan/zoom state
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const vectorContainerRef = useRef<HTMLDivElement>(null);
-
-  // Touch handlers for tablet / mobile gesture panning
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      setIsDragging(true);
-      setDragStart({ x: e.touches[0].clientX - panOffset.x, y: e.touches[0].clientY - panOffset.y });
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || e.touches.length !== 1) return;
-    setPanOffset({
-      x: e.touches[0].clientX - dragStart.x,
-      y: e.touches[0].clientY - dragStart.y,
-    });
-  };
-
-  const handleTouchEnd = () => setIsDragging(false);
-
   const selectedTech = technicians.find((t) => t.id === selectedTechId) || null;
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) || null;
 
@@ -527,28 +504,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({
     const x = ((lng - DFW_BOUNDS.minLng) / (DFW_BOUNDS.maxLng - DFW_BOUNDS.minLng)) * 100;
     const y = ((DFW_BOUNDS.maxLat - lat) / (DFW_BOUNDS.maxLat - DFW_BOUNDS.minLat)) * 100;
     return { x: Math.max(2, Math.min(98, x)), y: Math.max(2, Math.min(98, y)) };
-  };
-
-  // Pan and drag handlers for vector map
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setPanOffset({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y,
-    });
-  };
-
-  const handleMouseUp = () => setIsDragging(false);
-
-  const resetView = () => {
-    setZoomLevel(1);
-    setPanOffset({ x: 0, y: 0 });
   };
 
   return (
@@ -1156,412 +1111,50 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({
           </Map>
           </MapErrorBoundary>
         ) : (
-          /* Interactive Fallback DFW Territory Dispatch Canvas */
-          <div
-            ref={vectorContainerRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            className={`w-full h-full relative bg-slate-100 overflow-hidden cursor-${isDragging ? 'grabbing' : 'grab'}`}
-          >
-            {/* Background Corridor Grid & Metroplex Landmarks */}
-            <div
-              className="absolute inset-0 transition-transform duration-75 origin-center"
-              style={{
-                transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
-                width: '100%',
-                height: '100%',
-              }}
+          /* Tactical DFW Spatial Operations Canvas */
+          <TacticalTerritoryCanvas
+            technicians={technicians}
+            tickets={tickets}
+            filteredTickets={filteredTickets}
+            selectedTechId={selectedTechId}
+            onSelectTech={onSelectTech}
+            selectedTicketId={selectedTicketId}
+            onSelectTicket={onSelectTicket}
+            showDepots={showDepots}
+            showVehicles={showVehicles}
+            showRoutes={showRoutes}
+            activeInfoWindow={activeInfoWindow}
+            setActiveInfoWindow={setActiveInfoWindow}
+            onAssignTicketToTech={onAssignTicketToTech}
+          />
+        )}
+
+        {/* Selected Technician Floating Route Status Bar (Shown cleanly below filters when active) */}
+        {selectedTech && (
+          <div className="pointer-events-auto self-start flex items-center justify-between gap-2 px-3 py-1.5 bg-white/95 border border-blue-200 rounded-xl backdrop-blur-md text-xs text-slate-800 shadow-md max-w-full animate-fadeIn">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: selectedTech.color }} />
+              <span className="font-bold whitespace-nowrap">{selectedTech.vanNumber}</span>
+              <span className="text-slate-600 truncate hidden xs:inline">({selectedTech.name})</span>
+              <span className="text-blue-600 font-mono font-semibold whitespace-nowrap text-[11px] sm:text-xs">
+                {selectedTech.assignedTicketIds.length} stops • {selectedTech.routeMetrics?.totalDistanceMiles || 0} mi
+              </span>
+            </div>
+            <button
+              onClick={() => onSelectTech(null)}
+              className="ml-1 min-h-[36px] min-w-[36px] text-slate-500 hover:text-slate-800 text-xs font-bold p-1 rounded-md flex items-center justify-center cursor-pointer shrink-0"
+              title="Clear route selection"
+              aria-label="Clear route selection"
             >
-              {/* DFW Regional Highways SVG Network */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-                {/* Major Lakes */}
-                <ellipse cx="40" cy="22" rx="7" ry="4" fill="#E2E8F0" opacity="0.6" />
-                <ellipse cx="28" cy="18" rx="6" ry="5" fill="#E2E8F0" opacity="0.6" />
-                <ellipse cx="88" cy="40" rx="6" ry="7" fill="#E2E8F0" opacity="0.5" />
-
-                {/* Major Interstate Highway Corridors */}
-                {/* I-35W (Fort Worth North-South) */}
-                <path d="M 28 5 Q 26 40 27 95" stroke="#CBD5E1" strokeWidth="1.2" fill="none" strokeDasharray="3,1" />
-                {/* I-35E (Dallas North-South) */}
-                <path d="M 68 5 Q 70 48 72 95" stroke="#CBD5E1" strokeWidth="1.2" fill="none" strokeDasharray="3,1" />
-                {/* I-30 (Fort Worth to Dallas East-West) */}
-                <path d="M 5 56 Q 48 53 95 52" stroke="#CBD5E1" strokeWidth="1.4" fill="none" />
-                {/* I-635 / LBJ Loop */}
-                <path d="M 48 24 Q 74 20 86 36 Q 84 56 70 65 Q 46 62 48 24" stroke="#E2E8F0" strokeWidth="1" fill="none" />
-                {/* Hwy 183 / 114 Corridor */}
-                <path d="M 25 50 L 52 38 L 70 48" stroke="#CBD5E1" strokeWidth="1" fill="none" />
-                {/* President George Bush Turnpike (PGBT) */}
-                <path d="M 38 18 Q 65 14 84 28 Q 90 48 85 70" stroke="#E2E8F0" strokeWidth="0.8" fill="none" />
-
-                {/* Live Route Polylines Between Techs and Assigned Tickets */}
-                {showRoutes &&
-                  technicians.map((tech) => {
-                    const isSelected = selectedTechId === tech.id;
-                    const techTickets = tickets
-                      .filter((t) => tech.assignedTicketIds.includes(t.id))
-                      .sort((a, b) => (a.stopSequence || 0) - (b.stopSequence || 0));
-
-                    if (techTickets.length === 0) return null;
-                    if (selectedTechId && !isSelected) return null;
-
-                    const techPos = projectCoords(tech.currentLocation.lat, tech.currentLocation.lng);
-                    const depotPos = projectCoords(tech.depotLocation.lat, tech.depotLocation.lng);
-
-                    let pathD = `M ${techPos.x} ${techPos.y}`;
-                    techTickets.forEach((t) => {
-                      const tPos = projectCoords(t.location.lat, t.location.lng);
-                      pathD += ` L ${tPos.x} ${tPos.y}`;
-                    });
-                    pathD += ` L ${depotPos.x} ${depotPos.y}`;
-
-                    return (
-                      <g key={`route-${tech.id}`}>
-                        <path
-                          d={pathD}
-                          stroke={tech.color || '#2563EB'}
-                          strokeWidth={isSelected ? '2.5' : '1.2'}
-                          strokeOpacity={isSelected ? 0.9 : 0.4}
-                          strokeDasharray={isSelected ? '4,2' : '2,2'}
-                          fill="none"
-                        />
-                      </g>
-                    );
-                  })}
-              </svg>
-
-              {/* Geographic Labels */}
-              <div className="absolute top-[8%] left-[62%] text-[11px] font-extrabold text-slate-400 tracking-wider">PLANO / FRISCO</div>
-              <div className="absolute top-[48%] left-[68%] text-xs font-black text-slate-500 tracking-widest">DALLAS DOWNTOWN</div>
-              <div className="absolute top-[52%] left-[20%] text-xs font-black text-slate-500 tracking-widest">FORT WORTH</div>
-              <div className="absolute top-[56%] left-[44%] text-[11px] font-bold text-slate-400">ARLINGTON</div>
-              <div className="absolute top-[35%] left-[45%] text-[10px] font-bold text-slate-400">DFW AIRPORT / IRVING</div>
-              <div className="absolute top-[28%] left-[76%] text-[10px] font-bold text-slate-400">RICHARDSON / GARLAND</div>
-
-              {/* Regional Depots */}
-              {showDepots &&
-                HVAC_DEPOTS.map((depot) => {
-                  const pos = projectCoords(depot.lat, depot.lng);
-                  return (
-                    <div
-                      key={depot.id}
-                      onClick={() =>
-                        setActiveInfoWindow({
-                          type: 'DEPOT',
-                          id: depot.id,
-                          position: { lat: depot.lat, lng: depot.lng },
-                        })
-                      }
-                      style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center cursor-pointer group"
-                    >
-                      <div className="px-2 py-0.5 bg-slate-900 text-white rounded text-[9px] font-bold shadow-md whitespace-nowrap mb-1">
-                        🏢 {depot.name.split(' ')[0]}
-                      </div>
-                      <div className="w-7 h-7 rounded-xl bg-indigo-600 border-2 border-white shadow-xl flex items-center justify-center text-white">
-                        <Building2 className="w-3.5 h-3.5" />
-                      </div>
-                    </div>
-                  );
-                })}
-
-              {/* 15 HVAC Service Vans */}
-              {showVehicles &&
-                technicians.map((tech) => {
-                  const pos = projectCoords(tech.currentLocation.lat, tech.currentLocation.lng);
-                  const isSelected = selectedTechId === tech.id;
-                  const isOnSite = tech.status === 'ON_SITE';
-                  const isEnRoute = tech.status === 'EN_ROUTE';
-                  const isReturning = tech.status === 'RETURNING_DEPOT';
-
-                  return (
-                    <div
-                      key={tech.id}
-                      onClick={() => {
-                        onSelectTech(tech.id);
-                        setActiveInfoWindow({
-                          type: 'TECH',
-                          id: tech.id,
-                          position: { lat: tech.currentLocation.lat, lng: tech.currentLocation.lng },
-                        });
-                      }}
-                      style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all duration-300 z-30 ${
-                        isSelected ? 'scale-125 z-40' : 'hover:scale-115'
-                      }`}
-                    >
-                      <div
-                        className="px-2 py-0.5 rounded-full text-[9px] font-bold shadow-md border flex items-center gap-1 whitespace-nowrap mb-1 bg-white text-slate-900"
-                        style={{ borderColor: tech.color }}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tech.color }} />
-                        <span>{tech.vanNumber}</span>
-                        {isOnSite ? (
-                          <span className="text-amber-600 font-bold text-[8px] flex items-center gap-0.5">
-                            <Wrench className="w-2 h-2 animate-spin" /> On Site
-                          </span>
-                        ) : isEnRoute ? (
-                          <span className="text-blue-600 font-semibold text-[8px]">En Route</span>
-                        ) : isReturning ? (
-                          <span className="text-indigo-600 font-semibold text-[8px]">Returning</span>
-                        ) : (
-                          <span className="text-slate-400 font-normal">({tech.assignedTicketIds.length})</span>
-                        )}
-                      </div>
-
-                      <div
-                        className="w-7 h-7 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-white font-bold text-xs relative"
-                        style={{ backgroundColor: tech.color }}
-                      >
-                        {isOnSite ? (
-                          <Wrench className="w-3.5 h-3.5 text-white animate-bounce" />
-                        ) : (
-                          <Truck className="w-3.5 h-3.5" />
-                        )}
-                        {isOnSite && (
-                          <span className="absolute -inset-1 rounded-full border-2 border-amber-400 animate-ping opacity-90" />
-                        )}
-                        {isSelected && !isOnSite && (
-                          <span className="absolute -inset-1 rounded-full border-2 border-blue-500 animate-ping opacity-75" />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-              {/* Service Tickets with Matching Van Colors */}
-              {filteredTickets.map((ticket) => {
-                const pos = projectCoords(ticket.location.lat, ticket.location.lng);
-                const isSelected = selectedTicketId === ticket.id;
-                const assignedTech = technicians.find((t) => t.id === ticket.assignedTechId);
-                const isAssigned = !!assignedTech;
-                const badge = getTicketBadge(ticket);
-                const isCompleted = ticket.status === 'COMPLETED';
-                const isInProgress = ticket.status === 'IN_PROGRESS';
-                const vanColor = assignedTech?.color || '#64748B';
-
-                return (
-                  <div
-                    key={ticket.id}
-                    onClick={() => {
-                      onSelectTicket(ticket.id);
-                      setActiveInfoWindow({
-                        type: 'TICKET',
-                        id: ticket.id,
-                        position: { lat: ticket.location.lat, lng: ticket.location.lng },
-                      });
-                    }}
-                    style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all z-20 flex flex-col items-center group ${
-                      isSelected ? 'scale-130 z-40' : 'hover:scale-115'
-                    } ${isCompleted ? 'opacity-85' : ''}`}
-                  >
-                    {/* Van Header Pill */}
-                    <div
-                      className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold shadow-md border flex items-center gap-1 whitespace-nowrap mb-0.5 text-white"
-                      style={{
-                        backgroundColor: isAssigned ? vanColor : '#334155',
-                        borderColor: isAssigned ? '#FFFFFF' : '#475569',
-                      }}
-                    >
-                      {isAssigned ? (
-                        <>
-                          <Truck className="w-2.5 h-2.5 text-white/90" />
-                          <span>{assignedTech.vanNumber}</span>
-                          <span className="bg-black/30 px-1 py-0.2 rounded text-[8px] font-mono">
-                            #{ticket.stopSequence || 1}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-slate-300 text-[8px]">Unassigned</span>
-                          <span className="font-mono text-amber-300">{ticket.ticketNumber}</span>
-                        </>
-                      )}
-
-                      {isCompleted ? (
-                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-200" />
-                      ) : isInProgress ? (
-                        <Wrench className="w-2.5 h-2.5 text-amber-200 animate-spin" />
-                      ) : ticket.urgency === 'EMERGENCY' ? (
-                        <Flame className="w-2.5 h-2.5 text-white animate-pulse" />
-                      ) : null}
-                    </div>
-
-                    {/* Marker Pin Body in Van's Color */}
-                    <div className="relative flex flex-col items-center">
-                      <div
-                        className={`w-7 h-7 rounded-xl border-2 border-white shadow-lg flex items-center justify-center text-white font-black text-[11px] ${
-                          !isAssigned ? 'border-dashed' : ''
-                        }`}
-                        style={{
-                          backgroundColor: isAssigned ? vanColor : '#475569',
-                          boxShadow: isSelected ? `0 0 14px ${vanColor}` : undefined,
-                        }}
-                      >
-                        {isCompleted ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                        ) : isInProgress ? (
-                          <Wrench className="w-3.5 h-3.5 text-white animate-spin" />
-                        ) : isAssigned ? (
-                          <span className="font-mono font-black">#{ticket.stopSequence || 1}</span>
-                        ) : (
-                          badge.icon
-                        )}
-                      </div>
-
-                      {/* Pin Pointer Tip */}
-                      <div
-                        className="w-1.5 h-1.5 rotate-45 border-r-2 border-b-2 border-white shadow-xs -mt-1"
-                        style={{ backgroundColor: isAssigned ? vanColor : '#475569' }}
-                      />
-
-                      {/* Urgency Overlay */}
-                      {ticket.urgency === 'EMERGENCY' && !isCompleted && !isInProgress && (
-                        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-600 border border-white rounded-full flex items-center justify-center shadow-md animate-pulse">
-                          <Flame className="w-2 h-2 text-white" />
-                        </div>
-                      )}
-                      {ticket.urgency === 'SAME_DAY' && !isCompleted && !isInProgress && (
-                        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-500 border border-white rounded-full flex items-center justify-center shadow-md">
-                          <Clock className="w-2 h-2 text-white" />
-                        </div>
-                      )}
-                      {isInProgress && (
-                        <div className="absolute -inset-1 rounded-xl border-2 border-amber-400 animate-ping opacity-90 pointer-events-none" />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Interactive Vector Overlay Info Card Modal */}
-            {activeInfoWindow && (
-              <div className="absolute top-16 right-4 z-40 bg-white border border-slate-200 rounded-xl shadow-2xl p-3.5 max-w-[300px] animate-fadeIn text-xs text-slate-900">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
-                  <div className="font-bold text-xs uppercase tracking-wider text-slate-500">
-                    {activeInfoWindow.type === 'TICKET' ? 'Service Ticket Details' : activeInfoWindow.type === 'TECH' ? 'Technician Profile' : 'Regional Hub'}
-                  </div>
-                  <button
-                    onClick={() => setActiveInfoWindow(null)}
-                    className="text-slate-400 hover:text-slate-700 font-bold p-1 rounded"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {activeInfoWindow.type === 'TICKET' && (() => {
-                  const ticket = tickets.find((t) => t.id === activeInfoWindow.id);
-                  if (!ticket) return null;
-                  const assignedTech = technicians.find((t) => t.id === ticket.assignedTechId);
-                  const badge = getUrgencyBadge(ticket.urgency);
-
-                  return (
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold text-white ${badge.bg}`}>
-                          {ticket.urgency}
-                        </span>
-                        <span className="font-mono font-bold text-slate-800">{ticket.ticketNumber}</span>
-                      </div>
-                      <h4 className="font-bold text-sm text-slate-900 mb-1">{ticket.customerName}</h4>
-                      <p className="text-slate-600 text-xs mb-2">📍 {ticket.location.address}</p>
-
-                      <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 mb-2">
-                        <div className="font-bold text-slate-800 text-[11px]">❄️ {ticket.equipmentType}</div>
-                        <p className="text-slate-600 text-[11px] mt-0.5 leading-relaxed">{ticket.issueDescription}</p>
-                        {ticket.faultCode && (
-                          <div className="mt-1 font-mono text-[10px] font-bold text-red-600">
-                            Fault Code: {ticket.faultCode}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                        {assignedTech ? (
-                          <div className="flex items-center gap-1.5 font-bold">
-                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: assignedTech.color }} />
-                            <span style={{ color: assignedTech.color }}>{assignedTech.vanNumber}</span>
-                            <span className="text-slate-600 font-normal text-[11px]">({assignedTech.name})</span>
-                            {ticket.stopSequence && (
-                              <span
-                                className="ml-1 px-1.5 py-0.5 rounded text-[9px] text-white font-mono font-bold"
-                                style={{ backgroundColor: assignedTech.color }}
-                              >
-                                Stop #{ticket.stopSequence}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-amber-700 font-bold">Unassigned in Queue</span>
-                        )}
-                        <span className="text-[10px] text-slate-500 font-mono">SLA: {ticket.slaDeadline}</span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {activeInfoWindow.type === 'TECH' && (() => {
-                  const tech = technicians.find((t) => t.id === activeInfoWindow.id);
-                  if (!tech) return null;
-
-                  return <TechInfoWindowContent tech={tech} tickets={tickets} allowGeocoding={false} />;
-                })()}
-
-                {activeInfoWindow.type === 'DEPOT' && (() => {
-                  const depot = HVAC_DEPOTS.find((d) => d.id === activeInfoWindow.id);
-                  if (!depot) return null;
-
-                  return (
-                    <div>
-                      <h4 className="font-bold text-sm text-slate-900 mb-1">🏢 {depot.name}</h4>
-                      <p className="text-slate-600 text-xs mb-2">📍 {depot.address}</p>
-                      <div className="p-2 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-900 text-[11px]">
-                        Central Logistics, Refrigerant Storage & Technician Staging Hub.
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* Bottom-Right Zoom Controls */}
-            <div className="absolute bottom-18 landscape:bottom-3 md:bottom-4 right-3 md:right-4 z-20 flex flex-col gap-1 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-1 shadow-md">
-              <button
-                onClick={() => setZoomLevel((z) => Math.min(2.5, z + 0.25))}
-                className="min-h-[44px] min-w-[44px] p-2 rounded-lg hover:bg-slate-100 text-slate-700 font-bold transition-colors flex items-center justify-center cursor-pointer"
-                title="Zoom In"
-                aria-label="Zoom in on territory map"
-              >
-                <ZoomIn className="w-5 h-5" aria-hidden="true" />
-              </button>
-              <button
-                onClick={() => setZoomLevel((z) => Math.max(0.75, z - 0.25))}
-                className="min-h-[44px] min-w-[44px] p-2 rounded-lg hover:bg-slate-100 text-slate-700 font-bold transition-colors flex items-center justify-center cursor-pointer"
-                title="Zoom Out"
-                aria-label="Zoom out on territory map"
-              >
-                <ZoomOut className="w-5 h-5" aria-hidden="true" />
-              </button>
-              <button
-                onClick={resetView}
-                className="min-h-[44px] min-w-[44px] p-2 rounded-lg hover:bg-slate-100 text-slate-700 font-bold transition-colors border-t border-slate-100 flex items-center justify-center cursor-pointer"
-                title="Reset View"
-                aria-label="Reset territory map zoom and center"
-              >
-                <RotateCcw className="w-5 h-5" aria-hidden="true" />
-              </button>
-            </div>
+              ✕
+            </button>
           </div>
         )}
       </div>
 
+
       {/* Universal Floating Live Fleet Summary Pill & Card (Desktop, Tablet, Mobile) */}
-      <div className="absolute bottom-18 landscape:bottom-3 md:bottom-4 left-3 md:left-4 z-20 pointer-events-auto">
+      <div className="absolute bottom-18 landscape:bottom-3 md:bottom-4 left-3 md:left-4 z-20 pointer-events-auto flex items-center gap-2">
         {isSummaryMinimized ? (
           <button
             onClick={() => setIsSummaryMinimized(false)}
@@ -1614,6 +1207,12 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({
             </div>
           </div>
         )}
+
+        <div className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-white/90 backdrop-blur-md rounded-xl border border-slate-200 shadow-md text-xs font-bold text-slate-800 pointer-events-auto">
+          <ZenLogo size={18} variant="badge" />
+          <span className="text-[11px] font-extrabold text-slate-900">ZEN<span className="text-blue-600">AI</span> Co.</span>
+          <span className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold hidden md:inline">Spatial Logistics</span>
+        </div>
       </div>
     </div>
   );

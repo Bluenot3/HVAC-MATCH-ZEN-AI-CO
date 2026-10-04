@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Technician, ServiceTicket } from '../types/dispatch';
 import { generateGoogleMapsNavigationUrl } from '../services/routesApi';
+import { ZenLogo } from './brand/ZenLogo';
 import { 
   Printer, 
   ExternalLink, 
@@ -256,10 +257,11 @@ export const DailyManifestModal: React.FC<DailyManifestModalProps> = ({
       >
         {/* Top Action Bar (Hidden during print) */}
         <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between flex-wrap gap-2 print:hidden">
-          <div className="flex items-center gap-2">
-            <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: technician.color }} aria-hidden="true" />
-            <h2 id="daily-manifest-modal-title" className="font-bold text-base text-slate-900">
-              Daily Service Route Manifest — {technician.vanNumber}
+          <div className="flex items-center gap-2.5">
+            <ZenLogo size={28} variant="badge" />
+            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: technician.color }} aria-hidden="true" />
+            <h2 id="daily-manifest-modal-title" className="font-extrabold text-base text-slate-900">
+              ZEN AI Co. Manifest — {technician.vanNumber}
             </h2>
           </div>
 
@@ -346,15 +348,18 @@ export const DailyManifestModal: React.FC<DailyManifestModalProps> = ({
           {/* Company & Driver Manifest Header */}
           <div className="border-b border-slate-200 pb-4 mb-4">
             <div className="flex items-start justify-between">
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-widest text-blue-700">
-                  METROPLEX HVAC FIELD SERVICES
-                </div>
-                <h1 className="text-xl font-black text-slate-900 mt-0.5">
-                  Daily Dispatch Manifest & Multi-Stop Route
-                </h1>
-                <div className="text-xs text-slate-500 mt-1">
-                  Date: {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
+              <div className="flex items-start gap-3">
+                <ZenLogo size={40} variant="badge" />
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-widest text-blue-700">
+                    ZEN AI Co. • Autonomous Fleet Dispatch
+                  </div>
+                  <h1 className="text-xl font-black text-slate-900 mt-0.5">
+                    Daily Dispatch Manifest &amp; Multi-Stop Route
+                  </h1>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Date: {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })} • Engine: ZEN AI Multi-Provider
+                  </div>
                 </div>
               </div>
 

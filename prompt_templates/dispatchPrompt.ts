@@ -34,7 +34,7 @@ export function createDispatchPrompt(
   technicians: NormalizedTechnician[],
   pendingTickets: NormalizedTicket[]
 ): string {
-  return `You are the Lead AI Field Service Dispatch Engineer for an HVAC Fleet operating in ${territoryName}.
+  return `You are the Lead ZEN AI Field Service Dispatch Intelligence Engine for ZEN AI Co. operating in ${territoryName}.
 Analyze the active fleet units and pending ticket queue to formulate a high-efficiency dispatch optimization plan.
 
 Technicians available (${technicians.length}):

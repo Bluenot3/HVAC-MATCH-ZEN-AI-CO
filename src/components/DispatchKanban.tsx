@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Technician, ServiceTicket, UrgencyLevel } from '../types/dispatch';
+import { soundFx } from '../services/soundFx';
+import { ZenLogo } from './brand/ZenLogo';
 import { 
   Flame, 
   Clock, 
@@ -95,6 +97,7 @@ export const DispatchKanban: React.FC<DispatchKanbanProps> = ({
     e.dataTransfer.setData('text/plain', ticketId);
     e.dataTransfer.effectAllowed = 'move';
     setDraggedTicketId(ticketId);
+    soundFx.playSelectBlip();
   };
 
   const handleDragOver = (e: React.DragEvent, techId: string) => {
@@ -117,6 +120,7 @@ export const DispatchKanban: React.FC<DispatchKanbanProps> = ({
     setDragOverTechId(null);
     setDraggedTicketId(null);
     if (ticketId) {
+      soundFx.playConfirm();
       onAssignTicket(ticketId, techId);
     }
   };
@@ -194,11 +198,12 @@ export const DispatchKanban: React.FC<DispatchKanbanProps> = ({
             <button
               id="open-ai-dispatcher-btn"
               onClick={onOpenAiAssistant}
-              className="min-h-[36px] px-2.5 sm:px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer"
-              aria-label="Open AI Dispatch Assistant"
+              className="min-h-[36px] px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer"
+              aria-label="Open ZEN AI Dispatch Assistant"
+              title="Open ZEN AI Dispatch Assistant"
             >
-              <Sparkles className="w-4 h-4" aria-hidden="true" />
-              <span>AI Dispatch</span>
+              <Sparkles className="w-4 h-4 text-cyan-200" aria-hidden="true" />
+              <span>ZEN AI</span>
             </button>
 
             <button
@@ -347,7 +352,10 @@ export const DispatchKanban: React.FC<DispatchKanbanProps> = ({
                     id={`ticket-card-${ticket.id}`}
                     draggable
                     onDragStart={(e) => handleDragStart(e, ticket.id)}
-                    onClick={() => onSelectTicket(ticket.id)}
+                    onClick={() => {
+                      soundFx.playSelectBlip();
+                      onSelectTicket(ticket.id);
+                    }}
                     className={`p-3 rounded-xl bg-white border ${styles.cardBorder} cursor-grab active:cursor-grabbing hover:shadow-md transition-all duration-150 shadow-xs ${
                       isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30' : ''
                     }`}
@@ -489,7 +497,10 @@ export const DispatchKanban: React.FC<DispatchKanbanProps> = ({
                     onDragOver={(e) => handleDragOver(e, tech.id)}
                     onDragLeave={(e) => handleDragLeave(e, tech.id)}
                     onDrop={(e) => handleDrop(e, tech.id)}
-                    onClick={() => onSelectTech(tech.id === selectedTechId ? null : tech.id)}
+                    onClick={() => {
+                      soundFx.playSelectBlip();
+                      onSelectTech(tech.id === selectedTechId ? null : tech.id);
+                    }}
                     className={`rounded-xl border transition-all duration-150 flex items-center justify-between p-2.5 bg-white shadow-2xs cursor-pointer ${
                       isDragOver
                         ? 'border-blue-500 ring-2 ring-blue-400 bg-blue-50/50'
@@ -531,7 +542,10 @@ export const DispatchKanban: React.FC<DispatchKanbanProps> = ({
                   onDragOver={(e) => handleDragOver(e, tech.id)}
                   onDragLeave={(e) => handleDragLeave(e, tech.id)}
                   onDrop={(e) => handleDrop(e, tech.id)}
-                  onClick={() => onSelectTech(tech.id === selectedTechId ? null : tech.id)}
+                  onClick={() => {
+                    soundFx.playSelectBlip();
+                    onSelectTech(tech.id === selectedTechId ? null : tech.id);
+                  }}
                   className={`rounded-xl border transition-all duration-200 flex flex-col bg-white shadow-xs overflow-hidden ${
                     isDragOver
                       ? 'border-blue-500 ring-4 ring-blue-500/20 bg-blue-50/50 scale-[1.01]'
