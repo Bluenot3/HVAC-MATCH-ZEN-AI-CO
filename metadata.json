@@ -1,0 +1,10 @@
+{
+  "name": "Remix: HVAC Field Service Dispatch Board",
+  "description": "Interactive regional territory dispatch board for 15 HVAC technicians with urgency ticket clustering, real-time Routes API multi-stop route optimization, AI dispatch assistant, and daily manifests.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
